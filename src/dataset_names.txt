@@ -1,3 +1,6 @@
 
 - 'samsum'
-
+- 'cnn_dailymail'
+- 'billsum'
+- 'EdinburghNLP/xsum'
+- 'multi_news'

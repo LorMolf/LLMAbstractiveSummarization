@@ -40,6 +40,7 @@ from transformers import (
     get_scheduler
 )
 
+
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
@@ -84,7 +85,7 @@ def main():
 
 
     wandb.init(mode=data_args.logging,
-                name=training_args.output_dir.split("/")[2],
+              name=training_args.output_dir.split("/")[2],
     )
 
     # Setup logging
