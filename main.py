@@ -106,19 +106,6 @@ def main():
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # TODO: add all the models that may need prefix (eg, mT0)
-    if data_args.source_prefix is None and model_args.model_name_or_path in [
-        "t5-small",
-        "t5-base",
-        "t5-large",
-        "t5-3b",
-        "t5-11b",
-    ]:
-        logger.warning(
-            "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
-            "`--source_prefix 'summarize: ' `"
-        )
-
     # Detecting last checkpoint.
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -167,26 +154,39 @@ def main():
         )
 
     # Load pretrained model and tokenizer
-    
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
-    model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path)
-    
     
     if model_args.use_peft:
-        # Define LoRA Config
-        lora_config = LoraConfig(
-                        r=16,
-                        lora_alpha=32,
-                        target_modules=["q", "v"],
-                        lora_dropout=0.1,
-                        bias="none",
-                        task_type="CAUSAL_LM")
+
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, 
+                                                     quantization_config=bnb_config)
         
         # prepare int-8 model for training
-        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+        model.gradient_checkpointing_enable()
+        model = prepare_model_for_kbit_training(model)
+
+        # Define LoRA Config
+        lora_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.1,
+            bias="none",
+            task_type="CAUSAL_LM")
 
         # add LoRA adaptor
         model = get_peft_model(model, lora_config)
+
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, torch_dtype=torch.float16 if training_args.fp16 else torch.float32)
+
+    model.config.use_cache = False
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -223,7 +223,7 @@ def main():
                 " model's position encodings by passing `--resize_position_embeddings`."
             )
 
-    prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
+    prefix = data_args.source_prefix if data_args.source_prefix is not None else "Write a summary of the following text.\n"
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -268,13 +268,15 @@ def main():
     def preprocess_function(examples):
         # remove pairs where at least one record is None
 
+        postfix = '\nSUMMARY:\n'
+
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
             if examples[text_column][i] and examples[summary_column][i]:
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
 
-        inputs = [prefix + inp for inp in inputs]
+        inputs = [prefix + inp + postfix for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
 
         # Tokenize targets with the `text_target` keyword argument
@@ -315,34 +317,48 @@ def main():
                 desc="Running tokenizer on train dataset",
             )
         
-        # Optimizer
-        # Split weights in two groups, one with weight decay and the other not.
-        no_decay = ["bias", "LayerNorm.weight", "layer_norm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": training_args.weight_decay,
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                "weight_decay": 0.0,
-            },
-        ]
 
         train_dataloader = DataLoader(
             train_dataset, shuffle=True, collate_fn=data_collator,
             batch_size=training_args.per_device_train_batch_size
         )
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=training_args.learning_rate)
+        
+
         num_update_steps_per_epoch = len(train_dataloader)
         max_train_steps = training_args.num_train_epochs * num_update_steps_per_epoch
 
-        lr_scheduler = get_scheduler(
-            name="linear",
-            optimizer=optimizer,
-            num_warmup_steps=0,
-            num_training_steps=max_train_steps
-        )
+
+        # Optimizer
+        # Split weights in two groups, one with weight decay and the other not.
+        if not model_args.use_peft:
+            no_decay = ["bias", "LayerNorm.weight", "layer_norm.weight"]
+            optimizer_grouped_parameters = [
+                {
+                    "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "weight_decay": training_args.weight_decay,
+                },
+                {
+                    "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "weight_decay": 0.0,
+                },
+            ]
+
+            optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=training_args.learning_rate)
+
+            lr_scheduler = get_scheduler(
+                name="linear",
+                optimizer=optimizer,
+                num_warmup_steps=0,
+                num_training_steps=max_train_steps
+            )
+        else:
+            optimizer = 'paged_adamw_8bit'
+            lr_scheduler = 'linear'
+
+
+        #training_args.optim=optimizer,
+        #training_args.lr_scheduler_type=lr_scheduler
+        
         optimizers = (optimizer, lr_scheduler)
     else:
         optimizers = (None, None)
@@ -395,7 +411,7 @@ def main():
         preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
-        decoded_preds = [pred.strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
+        decoded_preds = [pred.strip().split('SUMMARY:')[-1] for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
         decoded_labels = [label.strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
 
         # rougeLSum expects newline after each sentence
@@ -429,6 +445,13 @@ def main():
     #     data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
     # )
 
+    print('-'*100)
+    print(f">>> {optimizers}")
+    print('*'*50)
+    print(model)
+    print('*'*50)
+    print(sum([1 for pp in model.parameters() if pp.requires_grad]))
+    print('-'*100)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -477,6 +500,7 @@ def main():
     if training_args.do_predict:
         logger.info("*** Predict ***")
         
+        model.eval()
         predict_results = trainer.predict(predict_dataset, metric_key_prefix="predict")
 
         metrics = predict_results.metrics
@@ -488,11 +512,15 @@ def main():
         trainer.log_metrics("predict", metrics)
         trainer.save_metrics("predict", metrics)
 
-        """
+        
         if trainer.is_world_process_zero():
-            if training_args.predict_with_generate:
-                predictions = predict_results.predictions
+            if model_args.predict_with_generate:
+                #predictions = predict_results.predictions
+                predictions = model.generate(train_dataset[0])
+                print(f">> {predictions.shape}")
+                predictions = np.argmax(predictions, axis=-1)
                 predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
+                
                 predictions = tokenizer.batch_decode(
                     predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
                 )
@@ -500,7 +528,7 @@ def main():
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
                 with open(output_prediction_file, "w") as writer:
                     writer.write("\n".join(predictions))
-        """
+        
 
     kwargs = {"finetuned_from": model_args.model_name_or_path}
 

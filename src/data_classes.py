@@ -220,3 +220,8 @@ class ModelArguments:
         default=False,
         metadata={"help": "Use PEFT for training or not"},
     )
+    
+    predict_with_generate : bool = field(
+        default=False,
+        metadata={"help" : "Whether to store the output prediction in a text file"}
+    )
