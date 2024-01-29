@@ -13,7 +13,6 @@ import nltk
 import numpy as np
 from datasets import load_dataset, load_from_disk
 from filelock import FileLock
-from utils import create_input
 from torch.utils.data import DataLoader
 
 
@@ -25,7 +24,7 @@ from peft import (
     PeftModel,
     get_peft_model,
     prepare_model_for_kbit_training,
-    prepare_model_for_int8_training
+    prepare_model_for_int8_training,
     TaskType
 )
 from transformers import (
@@ -33,6 +32,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     TrainingArguments,
+    Trainer, 
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
@@ -62,12 +62,6 @@ except (LookupError, OSError):
         nltk.download("punkt", quiet=True)
 
 
-task_name_mapping = {
-    "text_summarization": ("full_text", "maxims_text"),
-}
-
-
-
 
 def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
@@ -83,10 +77,10 @@ def main():
 
     assert not os.path.exists(training_args.output_dir), "Output directory already exists"
 
-
-    wandb.init(mode=data_args.logging,
-              name=training_args.output_dir.split("/")[2],
-    )
+    if training_args.report_to == 'wandb':
+        wandb.init(mode=data_args.logging,
+                name=training_args.output_dir.split("/")[2],
+        )
 
     # Setup logging
     logging.basicConfig(
@@ -201,8 +195,8 @@ def main():
     if len(tokenizer) > embedding_size:
         model.resize_token_embeddings(len(tokenizer))
 
-    if model.config.decoder_start_token_id is None:
-        raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
+    #if model.config.decoder_start_token_id is None:
+    #    raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
     if (
             hasattr(model.config, "max_position_embeddings")
@@ -292,18 +286,16 @@ def main():
         return model_inputs
 
     # Data collator
-    label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+    #label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
     data_collator = DataCollatorForLanguageModeling(
         tokenizer,
-        label_pad_token_id=label_pad_token_id,
+        #label_pad_token_id=label_pad_token_id,
         mlm=False,
         pad_to_multiple_of=8 if training_args.fp16 else None,
     )
 
     if training_args.do_train:
         train_dataset = raw_datasets["train"]
-        if data_args.task_name == "outcome_prediction":
-            train_dataset = create_input(train_dataset, data_args.lang, "train")
 
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
@@ -353,8 +345,6 @@ def main():
     if training_args.do_eval:
         max_target_length = data_args.val_max_target_length
         eval_dataset = raw_datasets["validation"]
-        if data_args.task_name == "outcome_prediction":
-            eval_dataset = create_input(eval_dataset, data_args.lang, "validation")
         
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
@@ -372,8 +362,6 @@ def main():
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
         predict_dataset = raw_datasets["test"]
-        if data_args.task_name == "outcome_prediction":
-            predict_dataset = create_input(predict_dataset, data_args.lang, "test")
             
         if data_args.max_predict_samples is not None:
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
@@ -395,11 +383,14 @@ def main():
         preds, labels, input_ids = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
-        # Replace -100s used for padding as we can't decode them
-        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
-        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
         preds = np.argmax(preds, axis=-1)
+
+        # # Replace -100s used for padding as we can't decode them
+        # preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        # labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+
+        
 
         decoded_preds = [pred.strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
         decoded_labels = [label.strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
@@ -425,28 +416,27 @@ def main():
 
         return result
 
-    # Override the decoding parameters of Seq2SeqTrainer
-    training_args.generation_max_length = (
-        training_args.generation_max_length
-        if training_args.generation_max_length is not None
-        else data_args.val_max_target_length
-    )
-    training_args.generation_num_beams = (
-        data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
-    )
+    # # Override the decoding parameters of Seq2SeqTrainer
+    # training_args.generation_max_length = (
+    #     training_args.generation_max_length
+    #     if training_args.generation_max_length is not None
+    #     else data_args.val_max_target_length
+    # )
+    # training_args.generation_num_beams = (
+    #     data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
+    # )
 
 
     # Initialize our Trainer
-    trainer = Seq2SeqTrainer(
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics if training_args.predict_with_generate else None,
+        compute_metrics=compute_metrics,
         optimizers=optimizers,
-
     )
 
     # Training
@@ -507,7 +497,7 @@ def main():
                 with open(output_prediction_file, "w") as writer:
                     writer.write("\n".join(predictions))
 
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": data_args.task_name}
+    kwargs = {"finetuned_from": model_args.model_name_or_path}
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

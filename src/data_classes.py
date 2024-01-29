@@ -153,8 +153,7 @@ class DataTrainingArguments:
 
     def __post_init__(self):
         if (
-                self.task_name is None
-                and self.dataset_name is None
+                self.dataset_name is None
                 and self.dataset_name_local is None
                 and self.train_file is None
                 and self.validation_file is None
