@@ -72,8 +72,7 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    training_args.output_dir += "/" + model_args.model_name_or_path.partition("/")[-1] + "_"
-    training_args.output_dir += str(data_args.max_train_samples)
+    training_args.output_dir += "/" + model_args.model_name_or_path.split("/")[-1]
 
     assert not os.path.exists(training_args.output_dir), "Output directory already exists"
 
@@ -192,6 +191,12 @@ def main():
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
+    
+    if tokenizer.pad_token is None:
+      print("No padding token - using EOS instead")
+      tokenizer.pad_token = tokenizer.eos_token
+    
+    
     if len(tokenizer) > embedding_size:
         model.resize_token_embeddings(len(tokenizer))
 
@@ -380,17 +385,15 @@ def main():
     metric_rouge = evaluate.load("rouge")
 
     def compute_metrics(eval_preds):
-        preds, labels, input_ids = eval_preds
+        preds, labels = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
 
         preds = np.argmax(preds, axis=-1)
 
-        # # Replace -100s used for padding as we can't decode them
-        # preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
-        # labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-
-        
+        # Replace -100s used for padding as we can't decode them
+        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
         decoded_preds = [pred.strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
         decoded_labels = [label.strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
@@ -408,9 +411,9 @@ def main():
         decoded_preds = [pred.replace("\n", " ") for pred in decoded_preds]
         decoded_labels = [label.replace("\n", " ") for label in decoded_labels]
 
-        result_bs = metric_bertscore.compute(predictions=decoded_preds, references=decoded_labels, lang=data_args.lang,
-                                             idf=True, rescale_with_baseline=True,
-                                             model_type=model_args.model_for_bertscore)
+        #result_bs = metric_bertscore.compute(predictions=decoded_preds, references=decoded_labels, lang=data_args.lang,
+        #                                     idf=True, rescale_with_baseline=True,
+        #                                     model_type=model_args.model_for_bertscore)
 
         result["gen_len"] = np.mean([np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds])
 
@@ -485,6 +488,7 @@ def main():
         trainer.log_metrics("predict", metrics)
         trainer.save_metrics("predict", metrics)
 
+        """
         if trainer.is_world_process_zero():
             if training_args.predict_with_generate:
                 predictions = predict_results.predictions
@@ -496,6 +500,7 @@ def main():
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
                 with open(output_prediction_file, "w") as writer:
                     writer.write("\n".join(predictions))
+        """
 
     kwargs = {"finetuned_from": model_args.model_name_or_path}
 
