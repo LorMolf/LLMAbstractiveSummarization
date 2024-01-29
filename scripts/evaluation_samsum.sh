@@ -48,3 +48,5 @@ CUDA_VISIBLE_DEVICES=1 python3 main.py --dataset_name $DATASET_NAME \
                                        --predict_with_generate \
                                        --use_peft \
                                        --fp16 \
+                                       --optim "paged_adamw_8bit" \
+                                       --lr_scheduler_type "cosine"

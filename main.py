@@ -170,7 +170,7 @@ def main():
         
         # prepare int-8 model for training
         model.gradient_checkpointing_enable()
-        model = prepare_model_for_kbit_training(model)
+        model = prepare_model_for_int8_training(model)
 
         # Define LoRA Config
         lora_config = LoraConfig(
@@ -178,6 +178,7 @@ def main():
             lora_alpha=32,
             lora_dropout=0.1,
             bias="none",
+            target_modules=["q_proj", "k_proj", "v_proj"],
             task_type="CAUSAL_LM")
 
         # add LoRA adaptor
@@ -353,11 +354,7 @@ def main():
             )
         else:
             optimizer = 'paged_adamw_8bit'
-            lr_scheduler = 'linear'
-
-
-        #training_args.optim=optimizer,
-        #training_args.lr_scheduler_type=lr_scheduler
+            lr_scheduler = 'cosine'
         
         optimizers = (optimizer, lr_scheduler)
     else:
@@ -445,13 +442,6 @@ def main():
     #     data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
     # )
 
-    print('-'*100)
-    print(f">>> {optimizers}")
-    print('*'*50)
-    print(model)
-    print('*'*50)
-    print(sum([1 for pp in model.parameters() if pp.requires_grad]))
-    print('-'*100)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -462,7 +452,7 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        optimizers=optimizers,
+        #optimizers=optimizers
     )
 
     # Training
@@ -473,7 +463,7 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
 
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        train_result = trainer.train()#resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
