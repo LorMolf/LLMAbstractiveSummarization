@@ -27,4 +27,5 @@ CUDA_VISIBLE_DEVICES=3 python3 main.py --dataset_name $DATASET_NAME \
                                        --model_name_or_path $MODEL_NAME \
                                        --cache_dir $CACHE_DIR \
                                        --output_dir $OUT_DIR \
-                                       --per_device_eval_batch_size $EVAL_BS
+                                       --per_device_eval_batch_size $EVAL_BS \
+                                       --fp16
