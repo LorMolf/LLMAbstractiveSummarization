@@ -1,11 +1,10 @@
-
-
 import logging
 import os
 import math
 import torch
 import sys
 import pandas as pd
+from tqdm import tqdm
 
 import wandb
 
@@ -65,6 +64,22 @@ except (LookupError, OSError):
         nltk.download("punkt", quiet=True)
 
 
+INSTRUCTION_PROMPT = 'You are an assistant capable of producing faithful and concise summaries of an input document.\n'
+USER_PROMPT = 'Summarize the following text:\n'
+
+PROMPTS = {
+    'zephyr' : {
+        'instruction' : f'<|system|> {INSTRUCTION_PROMPT}',
+        'user' : f'<|user|> {USER_PROMPT}',
+        'answer' : '<|assistant|>'
+    },
+    'llama2' : {
+        'instruction' : f'[INST] <<SYS>> {INSTRUCTION_PROMPT}',
+        'user' : f'<</SYS>> {USER_PROMPT}',
+        'answer' : '[/INST]'
+    }
+}
+
 
 def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
@@ -79,10 +94,6 @@ def main():
 
     assert not os.path.exists(training_args.output_dir), "Output directory already exists"
 
-    if training_args.report_to == 'wandb':
-        wandb.init(mode=data_args.logging,
-                name=training_args.output_dir.split("/")[2],
-        )
 
     # Setup logging
     logging.basicConfig(
@@ -181,7 +192,7 @@ def main():
             lora_alpha=32,
             lora_dropout=0.1,
             bias="none",
-            target_modules=["q_proj", "k_proj", "v_proj"],
+            target_modules=["q_proj", "v_proj"],
             task_type="CAUSAL_LM")
 
         # add LoRA adaptor
@@ -191,6 +202,19 @@ def main():
         model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, torch_dtype=torch.float16 if training_args.fp16 else torch.float32)
 
     model.config.use_cache = False
+
+
+
+    if training_args.report_to == 'wandb':
+        wandb.init(
+            project='Few-shot-Summarization',
+            mode=data_args.logging,
+            name=model_args.model_type,
+            dataset=data_args.dataset_name
+        )
+
+        wandb.watch(model)
+
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -204,8 +228,6 @@ def main():
     if len(tokenizer) > embedding_size:
         model.resize_token_embeddings(len(tokenizer))
 
-    #if model.config.decoder_start_token_id is None:
-    #    raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
     if (
             hasattr(model.config, "max_position_embeddings")
@@ -230,7 +252,6 @@ def main():
     prefix = data_args.source_prefix if data_args.source_prefix is not None else "Write a summary of the following text.\n"
 
     # Preprocessing the datasets.
-    # We need to tokenize inputs and targets.
     if training_args.do_train:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -269,8 +290,10 @@ def main():
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
-    INSTRUCTION_PROMPT = model_args.instruction_prompt
-    ANSWER_PROMPT = model_args.answer_prompt
+    model_type = model_args.model_type
+    INSTR = PROMPTS[model_type]['instruction']
+    USER = PROMPTS[model_type]['user']
+    ANSWER = PROMPTS[model_type]['answer']
 
     # preprocessing
     def format_dataset(sample):
@@ -280,8 +303,8 @@ def main():
         inputs = []    
 
         # append prefix and postfix prompts
-        instr = list(map(lambda x: ' '.join([f"{INSTRUCTION_PROMPT} Summarize the following piece of text:\n",x]), documents))
-        resp = list(map(lambda x: ' '.join([ANSWER_PROMPT,x]), summaries))
+        instr = list(map(lambda x: ' '.join([INSTR, x, USER]), documents))
+        resp = list(map(lambda x: ' '.join([ANSWER,x]), summaries))
         inputs = list(map(lambda x: '\n'.join([x[0], x[1], tokenizer.eos_token ]),zip(instr, resp)))
 
         return inputs
@@ -302,7 +325,7 @@ def main():
 
     # Data collator
     data_collator = DataCollatorForCompletionOnlyLM(
-        response_template=ANSWER_PROMPT, 
+        response_template=ANSWER, 
         tokenizer=tokenizer, 
         mlm=False)
 
@@ -401,6 +424,23 @@ def main():
     # Metric
     metric_rouge = evaluate.load("rouge")
 
+    def __compute_rouge(decoded_preds, decoded_labels):
+
+        # rougeLSum expects newline after each sentence
+        decoded_preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in decoded_preds]
+        decoded_labels = ["\n".join(nltk.sent_tokenize(label)) for label in decoded_labels]
+        
+        result = metric_rouge.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+        result = {k: round(v * 100, 2) for k, v in result.items()}
+
+        result["R"] = round(np.mean([result["rouge1"], result["rouge2"], result["rougeL"]]) / \
+            (1 + (np.var([result["rouge1"]/100, result["rouge2"]/100, result["rougeL"]/100]))), 2)
+
+        decoded_preds = [pred.replace("\n", " ") for pred in decoded_preds]
+        decoded_labels = [label.replace("\n", " ") for label in decoded_labels]
+
+        return result
+
     def compute_metrics(eval_preds):
         preds, labels = eval_preds
         if isinstance(preds, tuple):
@@ -411,42 +451,39 @@ def main():
         preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
-        decoded_preds = [pred.split(ANSWER_PROMPT)[-1].strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
-        decoded_labels = [label.strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
+        decoded_preds = [pred.split(ANSWER)[-1]\
+                             .replace('</s>', '')\
+                             .replace('<s>','')\
+                             .strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
+        decoded_labels = [label.split(ANSWER)[-1]\
+                               .replace('</s>', '')\
+                               .replace('<s>','')\
+                               .strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
 
-        # rougeLSum expects newline after each sentence
-        decoded_preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in decoded_preds]
-        decoded_labels = ["\n".join(nltk.sent_tokenize(label)) for label in decoded_labels]
+        result = __compute_rouge(decoded_preds, decoded_labels)
 
-        result = metric_rouge.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-        result = {k: round(v * 100, 2) for k, v in result.items()}
-
-        result["R"] = round(np.mean([result["rouge1"], result["rouge2"], result["rougeL"]]) / \
-            (1 + (np.var([result["rouge1"]/100, result["rouge2"]/100, result["rougeL"]/100]))), 2)
-
-        decoded_preds = [pred.replace("\n", " ") for pred in decoded_preds]
-        decoded_labels = [label.replace("\n", " ") for label in decoded_labels]
-
-        result["gen_len"] = np.mean([np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds])
+        result["gen_len"] = np.mean([len(pred) for pred in decoded_preds])
 
         return result
 
-
-    trainer = SFTTrainer(
-        model=model,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        peft_config=lora_config,
-        dataset_text_field="text",
-        max_seq_length=data_args.max_source_length,
-        tokenizer=tokenizer,
-        args=training_args,
-        packing=False,
-        compute_metrics=compute_metrics
-    )
+    trainer = None
 
     # Training
     if training_args.do_train:
+
+        trainer = SFTTrainer(
+            model=model,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset if training_args.do_eval else None,
+            peft_config=lora_config,
+            dataset_text_field="text",
+            max_seq_length=data_args.max_source_length,
+            tokenizer=tokenizer,
+            args=training_args,
+            packing=False,
+            compute_metrics=compute_metrics
+        )
+
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
@@ -470,6 +507,21 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
+
+        if trainer is None:
+            trainer = SFTTrainer(
+                model=model,
+                eval_dataset=eval_dataset,
+                peft_config=lora_config,
+                dataset_text_field="text",
+                max_seq_length=data_args.max_source_length,
+                tokenizer=tokenizer,
+                args=training_args,
+                packing=False,
+                compute_metrics=compute_metrics
+            )
+
+
         metrics = trainer.evaluate(metric_key_prefix="eval")
         max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
@@ -507,46 +559,84 @@ def main():
         
         if trainer.is_world_process_zero():
             if model_args.predict_with_generate:
-                #predictions = predict_results.predictions
+                
                 model = model.merge_and_unload()
 
-                # with training_args.main_process_first(desc="generation dataset map pre-processing"):
-                #     generation_ds = predict_dataset.map(
-                #         preprocess_function_w_tok,
-                #         batched=True,
-                #         num_proc=data_args.preprocessing_num_workers,
-                #         remove_columns='text',
-                #         load_from_cache_file=not data_args.overwrite_cache,
-                #         desc="Running tokenizer on generation dataset",
-                #     )
+                # tokenize data
+                generation_ds = predict_dataset.map(preprocess_function_w_tok,
+                                                    batched=True,
+                                                    remove_columns=['text'])
 
-                generation_ds = tokenizer(predict_dataset['text'], 
-                                            max_length=data_args.max_source_length, 
-                                            padding=padding, 
-                                            truncation=True,
-                                            return_tensors='pt')
-                
+                generation_dataloader = DataLoader(generation_ds, 
+                                                    batch_size=training_args.per_device_eval_batch_size,
+                                                    collate_fn=transformers.DefaultDataCollator())
+
+
+                raw_test_labels = raw_datasets['test'].select(range(max_predict_samples))
+                def get_summaries(x):
+                    out={}
+                    out[summary_column] = x[summary_column]
+                    return out
+                raw_test_labels = raw_test_labels.map(get_summaries, batched=True, remove_columns=raw_test_labels.column_names)
+
+                labels_dataloader = DataLoader(raw_test_labels, 
+                                                batch_size=training_args.per_device_eval_batch_size)
                 gen_config = {
                     'temperature' : model_args.temperature,
                     'do_sample' : model_args.do_sample,
                     'top_k' : model_args.top_k,
                     'top_p' : model_args.top_p
                 }
-                
-                predictions = model.generate(**generation_ds, **gen_config)
-                
-                predictions = tokenizer.batch_decode(
-                    predictions, 
-                    skip_special_tokens=True, 
-                    clean_up_tokenization_spaces=True
-                )
-                predictions = [pred.split(ANSWER_PROMPT)[-1].strip() for pred in predictions]
 
+                prediction_lst = []
+                metrics_tot = None
+
+                for gen_data_split, label_split in tqdm(zip(generation_dataloader, labels_dataloader), desc='Generating answers ...', total=len(generation_dataloader)):
+
+                    gen_data_concat = {key: torch.cat([v.view(1,data_args.max_source_length) for v in value], dim=0).to(model.device) for key, value in gen_data_split.items()}
+                    #print(f"<>>>>> {gen_data_concat['input_ids'].shape} | {gen_data_split['input_ids'][0].shape}")
+                    predictions = model.generate(**gen_data_concat, **gen_config)
+                    
+                    predictions = tokenizer.batch_decode(
+                        predictions, 
+                        skip_special_tokens=True, 
+                        clean_up_tokenization_spaces=True
+                    )
+                    predictions = [pred.split(ANSWER)[-1]\
+                                        .replace('</s>', '')\
+                                        .replace('<s>','')\
+                                        .strip() for pred in predictions]
+
+                    labels = [label.split(ANSWER)[-1]\
+                                    .replace('</s>', '')\
+                                    .replace('<s>','')\
+                                    .strip() for label in label_split[summary_column]]
+
+
+                    metrics = __compute_rouge(predictions, labels)
+
+                    metrics["gen_len"] = np.mean([len(pred) for pred in predictions])
+
+
+                    if metrics_tot is None:
+                        metrics_tot = metrics
+                    else:
+                        for k in metrics_tot: metrics_tot[k] += metrics[k]
+
+                    prediction_lst += predictions
+
+                for k in metrics_tot: metrics_tot[k] /= max_predict_samples
+
+                gen_metrics = {}
+                for k in metrics_tot: gen_metrics[f'generation_{k}'] = metrics_tot[k]
+
+                trainer.log_metrics("generation", gen_metrics)
+                trainer.save_metrics("generation", gen_metrics)
+                
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
                 with open(output_prediction_file, "w") as writer:
-                    writer.write("\n".join(predictions))
+                    writer.write("\n".join(prediction_lst))
         
-
     kwargs = {"finetuned_from": model_args.model_name_or_path}
 
     if training_args.push_to_hub:

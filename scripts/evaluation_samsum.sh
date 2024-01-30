@@ -14,12 +14,15 @@ MAX_STEPS=100
 WARMUP_STEPS=25
 
 
-TRAIN_BS=2
-EVAL_BS=2
+TRAIN_BS=1
+EVAL_BS=1
 
 MODEL_NAME="HuggingFaceH4/zephyr-7b-beta"
-MODEL_NAME="NousResearch/Llama-2-7b-chat-hf"
 
+
+MODEL_NAME="NousResearch/Llama-2-7b-chat-hf"
+MODEL_NAME="meta-llama/Llama-2-13b-hf"
+model_type="llama2"
 
 # Data
 DATASET_NAME="samsum"
@@ -42,9 +45,6 @@ CUDA_VISIBLE_DEVICES=0 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --summary_column $SUM_COL \
                                        --val_max_target_length $MAX_TARGET_LENGTH \
                                        --max_source_length $MAX_SOURCE_LENGTH \
-                                       --do_train \
-                                       --do_eval \
-                                       --do_predict \
                                        --model_name_or_path $MODEL_NAME \
                                        --cache_dir $CACHE_DIR \
                                        --output_dir $OUT_DIR \
@@ -60,10 +60,15 @@ CUDA_VISIBLE_DEVICES=0 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --fp16 \
                                        --max_steps $MAX_STEPS \
                                        --warmup_steps $WARMUP_STEPS \
-                                       --neftune_noise_alpha '1e-2'\
+                                       --neftune_noise_alpha '5'\
                                        --optim "paged_adamw_8bit" \
                                        --lr_scheduler_type "cosine" \
                                        --do_sample \
                                        --top_k $TOP_K \
                                        --top_p $TOP_P \
-                                       --temperature $TEMPERATURE
+                                       --temperature $TEMPERATURE \
+                                       --do_predict \
+                                       --do_train \
+                                       --do_eval \
+                                       --report_to "wandb"
+                                       

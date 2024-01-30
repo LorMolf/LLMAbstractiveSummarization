@@ -216,40 +216,39 @@ class ModelArguments:
             )
         },
     )
-    use_peft: bool = field(
+    use_peft: Optional[bool] = field(
         default=False,
         metadata={"help": "Use PEFT for training or not"},
     )
     
-    predict_with_generate : bool = field(
+    predict_with_generate : Optional[bool] = field(
         default=False,
         metadata={"help" : "Whether to store the output prediction in a text file"}
     )
 
-    instruction_prompt : str = field(
-        default='<|system|>',
-        metadata={'help':'prompting tag for delimiting the instruction and the input document'}
-    )
-
-    answer_prompt : str = field(
-        default='<|assistant|>',
-        metadata={'help':'prompting tag for delimiting the output summary'}
-    )
-
-    temperature : float = field(
+    temperature : Optional[float] = field(
         default=0.0,
         metadata={"help":"Generation parameters - temperature"}
     )
-    top_k : int = field(
+    top_k : Optional[int] = field(
         default=10,
         metadata={"help":"Generation parameters - temperature"}
     )
-    top_p : float = field(
+    top_p : Optional[float] = field(
         default=0.8,
         metadata={"help":"Generation parameters - temperature"}
     )
 
-    do_sample : bool = field(
+    do_sample : Optional[bool] = field(
         default=False,
         metadata={"help":"Enable sampling in generation"}
     )
+
+    model_type : Optional[str] = field(
+        default='zephyr',
+        metadata={"help": "Type of input model ('zephyr' OR 'llama2')"}
+    )
+
+    def __post_init__(self):
+        if self.model_type not in ['zephyr', 'llama2']:
+            raise ValueError(f"Specify a model type among these two options: 'zephyr' OR 'llama2'")
