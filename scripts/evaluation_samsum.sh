@@ -30,9 +30,14 @@ SUM_COL="summary"
 MAX_SOURCE_LENGTH=1024
 MAX_TARGET_LENGTH=200
 
+# GEN PARAMS
+TOP_K=20
+TOP_P=0.2
+TEMPERATURE=0.8
+
 
 #CUDA_VISIBLE_DEVICES=1 python3 main.py 
-CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
+CUDA_VISIBLE_DEVICES=0 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --text_column $TEXT_COL \
                                        --summary_column $SUM_COL \
                                        --val_max_target_length $MAX_TARGET_LENGTH \
@@ -55,5 +60,10 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --fp16 \
                                        --max_steps $MAX_STEPS \
                                        --warmup_steps $WARMUP_STEPS \
+                                       --neftune_noise_alpha '1e-2'\
                                        --optim "paged_adamw_8bit" \
-                                       --lr_scheduler_type "cosine"
+                                       --lr_scheduler_type "cosine" \
+                                       --do_sample \
+                                       --top_k $TOP_K \
+                                       --top_p $TOP_P \
+                                       --temperature $TEMPERATURE

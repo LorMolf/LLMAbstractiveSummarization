@@ -233,5 +233,23 @@ class ModelArguments:
 
     answer_prompt : str = field(
         default='<|assistant|>',
-        metadata={'hekp':'prompting tag for delimiting the output summary'}
+        metadata={'help':'prompting tag for delimiting the output summary'}
+    )
+
+    temperature : float = field(
+        default=0.0,
+        metadata={"help":"Generation parameters - temperature"}
+    )
+    top_k : int = field(
+        default=10,
+        metadata={"help":"Generation parameters - temperature"}
+    )
+    top_p : float = field(
+        default=0.8,
+        metadata={"help":"Generation parameters - temperature"}
+    )
+
+    do_sample : bool = field(
+        default=False,
+        metadata={"help":"Enable sampling in generation"}
     )
