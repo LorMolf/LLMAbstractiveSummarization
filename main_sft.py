@@ -64,7 +64,11 @@ except (LookupError, OSError):
         nltk.download("punkt", quiet=True)
 
 
-INSTRUCTION_PROMPT = 'You are an assistant capable of producing faithful and concise summaries of an input document.\n'
+INSTRUCTION_PROMPT = """
+You are an assistant capable of producing faithful and concise summaries of an input document. 
+Read the text provided by the user and summarize it by keeping the most useful information which
+you consider to best sum up the content of the document. Be as concise as needed and do not
+include information out of the input text's domain.\n"""
 USER_PROMPT = 'Summarize the following text:\n'
 
 PROMPTS = {
@@ -73,10 +77,15 @@ PROMPTS = {
         'user' : f'<|user|> {USER_PROMPT}',
         'answer' : '<|assistant|>'
     },
+    # 'llama2' : {
+    #     'instruction' : f'[INST] <<SYS>> {INSTRUCTION_PROMPT}',
+    #     'user' : f'<</SYS>> {USER_PROMPT}',
+    #     'answer' : '[/INST]'
+    # }
     'llama2' : {
-        'instruction' : f'[INST] <<SYS>> {INSTRUCTION_PROMPT}',
-        'user' : f'<</SYS>> {USER_PROMPT}',
-        'answer' : '[/INST]'
+        'instruction' : f'# Assistant:\n {INSTRUCTION_PROMPT}',
+        'user' : f'# Summarize:\n {USER_PROMPT}',
+        'answer' : '# Summary:'
     }
 }
 
@@ -90,10 +99,9 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    training_args.output_dir += "/" + model_args.model_name_or_path.split("/")[-1]
+    training_args.output_dir += "/" + model_args.model_name_or_path.split("/")[-1] + '/' + '_'.join([data_args.dataset_name, str(data_args.max_train_samples), str(training_args.seed)])
 
     assert not os.path.exists(training_args.output_dir), "Output directory already exists"
-
 
     # Setup logging
     logging.basicConfig(
@@ -167,6 +175,9 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
 
+    # Shuffle dataset
+    raw_datasets = raw_datasets.shuffle(seed=training_args.seed)
+
     # Load pretrained model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
     
@@ -208,12 +219,15 @@ def main():
     if training_args.report_to == 'wandb':
         wandb.init(
             project='Few-shot-Summarization',
-            mode=data_args.logging,
-            name=model_args.model_type,
-            dataset=data_args.dataset_name
+            name=f"{model_args.model_type}-{data_args.dataset_name}", 
+            config={
+                "architecture": model_args.model_type,
+                "dataset": data_args.dataset_name,
+                "n_train_data": data_args.max_train_samples,
+            }
         )
 
-        wandb.watch(model)
+        #wandb.watch(model, log_freq=100)
 
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
@@ -491,7 +505,7 @@ def main():
             checkpoint = last_checkpoint
 
         train_result = trainer.train()#resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        #trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
         max_train_samples = (
@@ -501,7 +515,7 @@ def main():
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
-        trainer.save_state()
+        #trainer.save_state()
 
     # Evaluation
     results = {}
@@ -643,6 +657,8 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+    wandb.finish()
 
     return results
 
