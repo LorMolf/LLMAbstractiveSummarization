@@ -32,7 +32,7 @@ WARMUP_STEPS=25
 
 
 
-for SEED in 42 0 117
+for SEED in 42
 do
     for FS in 10 100
     do
@@ -78,7 +78,7 @@ model_type="llama2"
 NEFTUNE=15
 WARMUP_STEPS=20
 
-for SEED in 42 0 117
+for SEED in 42
 do
     for FS in 10 100
     do
