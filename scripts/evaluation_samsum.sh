@@ -10,6 +10,10 @@ SEED=42
 MAX_TRAIN_SAMPLES=10
 MAX_TEST_SAMPLES=5
 
+MAX_STEPS=100
+WARMUP_STEPS=25
+
+
 TRAIN_BS=2
 EVAL_BS=2
 
@@ -27,7 +31,8 @@ MAX_SOURCE_LENGTH=1024
 MAX_TARGET_LENGTH=200
 
 
-CUDA_VISIBLE_DEVICES=1 python3 main.py --dataset_name $DATASET_NAME \
+#CUDA_VISIBLE_DEVICES=1 python3 main.py 
+CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --text_column $TEXT_COL \
                                        --summary_column $SUM_COL \
                                        --val_max_target_length $MAX_TARGET_LENGTH \
@@ -48,5 +53,7 @@ CUDA_VISIBLE_DEVICES=1 python3 main.py --dataset_name $DATASET_NAME \
                                        --predict_with_generate \
                                        --use_peft \
                                        --fp16 \
+                                       --max_steps $MAX_STEPS \
+                                       --warmup_steps $WARMUP_STEPS \
                                        --optim "paged_adamw_8bit" \
                                        --lr_scheduler_type "cosine"

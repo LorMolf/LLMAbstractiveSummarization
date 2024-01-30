@@ -225,3 +225,13 @@ class ModelArguments:
         default=False,
         metadata={"help" : "Whether to store the output prediction in a text file"}
     )
+
+    instruction_prompt : str = field(
+        default='<|system|>',
+        metadata={'help':'prompting tag for delimiting the instruction and the input document'}
+    )
+
+    answer_prompt : str = field(
+        default='<|assistant|>',
+        metadata={'hekp':'prompting tag for delimiting the output summary'}
+    )
