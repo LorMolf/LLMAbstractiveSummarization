@@ -54,6 +54,7 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --per_device_train_batch_size $TRAIN_BS \
                                        --per_device_eval_batch_size $EVAL_BS \
                                        --max_train_samples $MAX_TRAIN_SAMPLES \
+                                       --max_predict_samples 5 \
                                        --max_steps $MAX_STEPS \
                                        --warmup_steps $WARMUP_STEPS \
                                        --neftune_noise_alpha '5'\
@@ -62,10 +63,11 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --learning_rate $LR \
                                        --seed $SEED \
                                        --use_peft \
+                                       --save_predictions_to_file \
                                        --fp16 \
                                        --report_to "wandb" \
                                        --do_predict \
-                                    #   --do_train \
+                                       --do_train \
                                     #    --do_sample \
                                     #    --top_k $TOP_K \
                                     #    --top_p $TOP_P \

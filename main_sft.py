@@ -68,12 +68,13 @@ INSTRUCTION_PROMPT = """
 You are an assistant capable of producing faithful and concise summaries of an input document. 
 Read the text provided by the user and summarize it by keeping the most useful information which
 you consider to best sum up the content of the document. Be as concise as needed and do not
-include information out of the input text's domain.\n"""
+include information out of the input text's domain. Include the summary within 
+the characters ``` ´´´ right after the word '{}'\n"""
 USER_PROMPT = 'Summarize the following text:\n'
 
 PROMPTS = {
     'zephyr' : {
-        'instruction' : f'<|system|> {INSTRUCTION_PROMPT}',
+        'instruction' : f'<|system|> {INSTRUCTION_PROMPT.format("<|assistant|>")}',
         'user' : f'<|user|> {USER_PROMPT}',
         'answer' : '<|assistant|>'
     },
@@ -83,7 +84,7 @@ PROMPTS = {
     #     'answer' : '[/INST]'
     # }
     'llama2' : {
-        'instruction' : f'# Assistant:\n {INSTRUCTION_PROMPT}',
+        'instruction' : f'# Assistant:\n {INSTRUCTION_PROMPT.format("# Summary:")}',
         'user' : f'# Summarize:\n {USER_PROMPT}',
         'answer' : '# Summary:'
     }
@@ -216,19 +217,17 @@ def main():
 
 
 
-    if training_args.report_to == 'wandb':
-        wandb.init(
-            project='Few-shot-Summarization',
-            name=f"{model_args.model_type}-{data_args.dataset_name}", 
-            config={
-                "architecture": model_args.model_type,
-                "dataset": data_args.dataset_name,
-                "n_train_data": data_args.max_train_samples,
-            }
-        )
+    wandb.init(
+        project='Few-shot-Summarization',
+        name=f"{model_args.model_type}-{data_args.dataset_name}", 
+        config={
+            "architecture": model_args.model_type,
+            "dataset": data_args.dataset_name,
+            "n_train_data": data_args.max_train_samples,
+        }
+    )
 
-        #wandb.watch(model, log_freq=100)
-
+    wandb.watch(model, log_freq=100)
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -317,8 +316,8 @@ def main():
         inputs = []    
 
         # append prefix and postfix prompts
-        instr = list(map(lambda x: ' '.join([INSTR, x, USER]), documents))
-        resp = list(map(lambda x: ' '.join([ANSWER,x]), summaries))
+        instr = list(map(lambda x: '\n'.join([INSTR, USER, x]), documents))
+        resp = list(map(lambda x: '\n'.join([ANSWER,'```',x,'´´´']), summaries))
         inputs = list(map(lambda x: '\n'.join([x[0], x[1], tokenizer.eos_token ]),zip(instr, resp)))
 
         return inputs
@@ -334,7 +333,7 @@ def main():
             documents = sample[text_column]
             inputs = []    
             # append prefix and postfix prompts
-            instr = list(map(lambda x: ' '.join([INSTR, x, USER, ANSWER]), documents))
+            instr = list(map(lambda x: '\n'.join([INSTR, USER, x, ANSWER, '```']), documents))
 
             return instr
 
@@ -484,11 +483,11 @@ def main():
         preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
-        decoded_preds = [pred.split(ANSWER)[-1]\
+        decoded_preds = [pred.split('```')[-1].split('´´´')[0]\
                              .replace('</s>', '')\
                              .replace('<s>','')\
                              .strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
-        decoded_labels = [label.split(ANSWER)[-1]\
+        decoded_labels = [label.split('```')[-1].split('´´´')[0]\
                                .replace('</s>', '')\
                                .replace('<s>','')\
                                .strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
@@ -499,24 +498,23 @@ def main():
 
         return result
 
-    trainer = None
+
+    trainer = SFTTrainer(
+        model=model,
+        train_dataset=train_dataset if training_args.do_train else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
+        peft_config=lora_config,
+        dataset_text_field="text",
+        max_seq_length=data_args.max_source_length,
+        tokenizer=tokenizer,
+        args=training_args,
+        packing=False,
+        optimizers=optimizers if not model_args.use_peft else (None, None),
+        compute_metrics=compute_metrics
+    )
 
     # Training
     if training_args.do_train:
-
-        trainer = SFTTrainer(
-            model=model,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset if training_args.do_eval else None,
-            peft_config=lora_config,
-            dataset_text_field="text",
-            max_seq_length=data_args.max_source_length,
-            tokenizer=tokenizer,
-            args=training_args,
-            packing=False,
-            optimizers=optimizers if not model_args.use_peft else (None, None),
-            compute_metrics=compute_metrics
-        )
 
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
@@ -540,7 +538,6 @@ def main():
     # Evaluation
     results = {}
     if training_args.do_eval:
-        print(">>>> EVALUATION")
         logger.info("*** Evaluate ***")
 
         if trainer is None:
@@ -584,11 +581,16 @@ def main():
             gen_config = {
                 'temperature' : model_args.temperature,
                 'do_sample' : model_args.do_sample,
+                'max_new_tokens' : data_args.max_target_length,
                 'top_k' : model_args.top_k,
                 'top_p' : model_args.top_p
             }
         else:
-            gen_config['do_sample'] =  model_args.do_sample
+            gen_config = {
+                'do_sample':   model_args.do_sample,
+                'max_new_tokens' : data_args.max_target_length
+            }
+            
 
         prediction_lst = []
         metrics_tot = None
@@ -606,7 +608,7 @@ def main():
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=True
             )
-            predictions = [pred.split(ANSWER)[-1]\
+            predictions = [pred.split('```')[-1].split('´´´')[0]\
                                 .replace('</s>', '')\
                                 .replace('<s>','')\
                                 .strip() for pred in predictions]
@@ -649,7 +651,7 @@ def main():
 
     wandb.finish()
 
-    return results
+    return
 
 
 def _mp_fn(index):
