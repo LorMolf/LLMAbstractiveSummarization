@@ -13,7 +13,7 @@ TRAIN_BS=1
 EVAL_BS=1
 
 MAX_SOURCE_LENGTH=1024
-MAX_TARGET_LENGTH=200
+MAX_TARGET_LENGTH=100
 
 LR='1e-4'
 
@@ -61,7 +61,8 @@ do
                                             --learning_rate $LR \
                                             --do_predict \
                                             --do_train \
-                                            --report_to "wandb"
+                                            --report_to "wandb" \
+                                            --save_strategy "no"
     done
 done
 
@@ -102,6 +103,7 @@ do
                                             --learning_rate $LR \
                                             --do_predict \
                                             --do_train \
-                                            --report_to "wandb"
+                                            --report_to "wandb" \
+                                            --save_strategy "no"
     done
 done

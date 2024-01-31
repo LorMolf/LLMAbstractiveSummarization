@@ -61,7 +61,9 @@ do
                                             --learning_rate $LR \
                                             --do_predict \
                                             --do_train \
-                                            --report_to "wandb"
+                                            --report_to "wandb" \
+                                            --save_strategy "no" \
+                                            --save_strategy "no"
     done
 done
 
@@ -102,6 +104,7 @@ do
                                             --learning_rate $LR \
                                             --do_predict \
                                             --do_train \
-                                            --report_to "wandb"
+                                            --report_to "wandb" \
+                                            --save_strategy "no"
     done
 done

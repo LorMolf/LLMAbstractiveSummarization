@@ -503,7 +503,6 @@ def main():
         optimizers=optimizers if not model_args.use_peft else (None, None),
         compute_metrics=compute_metrics
     )
-    trainer.save_strategy="no"
 
     # Training
     if training_args.do_train:
@@ -588,7 +587,7 @@ def main():
             
 
         prediction_lst = []
-        prediction_whole = []
+        #prediction_whole = []
         metrics_tot = None
 
         for i, pred_data_split in tqdm(enumerate(generation_dataloader), desc='Computing predictions on the test dataset...', total=num_pred_steps):
@@ -605,7 +604,7 @@ def main():
                 clean_up_tokenization_spaces=True
             )
 
-            prediction_whole += predictions
+            #prediction_whole += predictions
 
             predictions = [split_out_answer(pred) for pred in predictions]
 
@@ -635,7 +634,7 @@ def main():
             output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
             with open(output_prediction_file, "w") as writer:
                 for i, pred in enumerate(prediction_lst):
-                    writer.write('\n'.join(['-'*50, label_list[i], '*'*10, pred, '*'*10, prediction_whole[i], '\n']))
+                    writer.write('\n'.join(['-'*50, label_list[i], '*'*10, pred, '\n']))#'*'*10, prediction_whole[i], '\n']))
 
 
     # Final configs
