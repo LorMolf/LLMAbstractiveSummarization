@@ -598,7 +598,7 @@ def main():
             #gen_data_concat = {key: torch.cat([v.view(1,data_args.max_source_length) for v in value], dim=0).to(model.device) for key, value in gen_data_split.items()}
             #gen_data = gen_data_concat
 
-            gen_data = {'input_ids' : pred_data_split['input_ids'], 'attention_mask' : pred_data_split['attention_mask']}
+            gen_data = {'input_ids' : pred_data_split['input_ids'].to(model.device), 'attention_mask' : pred_data_split['attention_mask'].to(model.device)}
             predictions = model.generate(**gen_data, **gen_config)
             
             predictions = tokenizer.batch_decode(
