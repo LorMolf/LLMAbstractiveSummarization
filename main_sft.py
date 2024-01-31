@@ -350,8 +350,6 @@ def main():
         prompet_inputs = __padd_data(examples)
         res = __tokenize(prompet_inputs)
 
-        res['labels'] = examples[summary_column]
-
         return res
     
 
@@ -443,6 +441,9 @@ def main():
         if data_args.max_predict_samples is not None:
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
             predict_dataset = predict_dataset.select(range(max_predict_samples))
+
+        prediction_labels = predict_dataset[summary_column]
+
         with training_args.main_process_first(desc="prediction dataset map pre-processing"):
             predict_dataset = predict_dataset.map(
                 preprocess_function_predict,
@@ -513,7 +514,7 @@ def main():
             tokenizer=tokenizer,
             args=training_args,
             packing=False,
-            optimizers=optimizers if not model_args.use_peft else (None, None)
+            optimizers=optimizers if not model_args.use_peft else (None, None),
             compute_metrics=compute_metrics
         )
 
@@ -574,17 +575,25 @@ def main():
                                             batch_size=training_args.per_device_eval_batch_size,
                                             collate_fn=transformers.DefaultDataCollator())
 
-        gen_config = {
-            'temperature' : model_args.temperature,
-            'do_sample' : model_args.do_sample,
-            'top_k' : model_args.top_k,
-            'top_p' : model_args.top_p
-        }
+        label_list = list(prediction_labels)
+
+        num_pred_steps = len(generation_dataloader)
+
+        gen_config = {}
+        if model_args.do_sample:
+            gen_config = {
+                'temperature' : model_args.temperature,
+                'do_sample' : model_args.do_sample,
+                'top_k' : model_args.top_k,
+                'top_p' : model_args.top_p
+            }
+        else:
+            gen_config['do_sample'] =  model_args.do_sample
 
         prediction_lst = []
         metrics_tot = None
 
-        for pred_data_split in tqdm(generation_dataloader, desc='Computing predictions on the test dataset...', total=len(generation_dataloader)):
+        for i, pred_data_split in tqdm(enumerate(generation_dataloader), desc='Computing predictions on the test dataset...', total=num_pred_steps):
 
             #gen_data_concat = {key: torch.cat([v.view(1,data_args.max_source_length) for v in value], dim=0).to(model.device) for key, value in gen_data_split.items()}
             #gen_data = gen_data_concat
@@ -602,9 +611,9 @@ def main():
                                 .replace('<s>','')\
                                 .strip() for pred in predictions]
 
-            labels = pred_data_split['labels']
-
             # COMPUTE METRICS
+            bs = len(predictions)
+            labels = label_list[i*bs:(i+1)*bs]
             metrics = __compute_rouge(predictions, labels)
 
             metrics["predict_len"] = np.mean([len(pred) for pred in predictions])
@@ -617,10 +626,8 @@ def main():
 
             prediction_lst += predictions
 
-        for k in metrics_tot: metrics_tot[k] /= max_predict_samples
-
         gen_metrics = {}
-        for k in metrics_tot: gen_metrics[f'predict_{k}'] = metrics_tot[k]
+        for k in metrics_tot: gen_metrics[f'predict_{k}'] = metrics_tot[k] / num_pred_steps
 
         trainer.log_metrics("predict", gen_metrics)
         trainer.save_metrics("predict", gen_metrics)
