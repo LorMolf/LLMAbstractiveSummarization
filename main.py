@@ -294,10 +294,8 @@ def main():
         return model_inputs
 
     # Data collator
-    #label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
     data_collator = DataCollatorForLanguageModeling(
         tokenizer,
-        #label_pad_token_id=label_pad_token_id,
         mlm=False,
         pad_to_multiple_of=8 if training_args.fp16 else None,
     )
@@ -424,23 +422,9 @@ def main():
         decoded_preds = [pred.replace("\n", " ") for pred in decoded_preds]
         decoded_labels = [label.replace("\n", " ") for label in decoded_labels]
 
-        #result_bs = metric_bertscore.compute(predictions=decoded_preds, references=decoded_labels, lang=data_args.lang,
-        #                                     idf=True, rescale_with_baseline=True,
-        #                                     model_type=model_args.model_for_bertscore)
-
         result["gen_len"] = np.mean([np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds])
 
         return result
-
-    # # Override the decoding parameters of Seq2SeqTrainer
-    # training_args.generation_max_length = (
-    #     training_args.generation_max_length
-    #     if training_args.generation_max_length is not None
-    #     else data_args.val_max_target_length
-    # )
-    # training_args.generation_num_beams = (
-    #     data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
-    # )
 
 
     # Initialize our Trainer
@@ -452,7 +436,7 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        #optimizers=optimizers
+        optimizers=optimizers if not model_args.use_peft else (None, None)
     )
 
     # Training
@@ -504,10 +488,10 @@ def main():
 
         
         if trainer.is_world_process_zero():
-            if model_args.predict_with_generate:
-                #predictions = predict_results.predictions
+            if model_args.predict_with_generate: # TODO delete
+                
                 predictions = model.generate(train_dataset[0])
-                print(f">> {predictions.shape}")
+
                 predictions = np.argmax(predictions, axis=-1)
                 predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
                 

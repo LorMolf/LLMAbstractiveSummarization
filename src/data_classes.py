@@ -220,10 +220,10 @@ class ModelArguments:
         default=False,
         metadata={"help": "Use PEFT for training or not"},
     )
-    
-    predict_with_generate : Optional[bool] = field(
+
+    save_predictions_to_file : Optional[bool] = field(
         default=False,
-        metadata={"help" : "Whether to store the output prediction in a text file"}
+        metadata={"help": "Whether to save textual predictions to file"},
     )
 
     temperature : Optional[float] = field(

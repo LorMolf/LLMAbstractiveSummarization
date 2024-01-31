@@ -329,13 +329,31 @@ def main():
         out["text"] = format_dataset(sample)
         return out
 
-    def preprocess_function_w_tok(examples):
-        model_inputs = tokenizer(examples['text'], 
-                                 max_length=data_args.max_source_length, 
-                                 padding=padding, 
-                                 truncation=True,
-                                 return_tensors='pt')
-        return model_inputs
+    def preprocess_function_predict(examples):
+        def __padd_data(sample):
+            documents = sample[text_column]
+            inputs = []    
+            # append prefix and postfix prompts
+            instr = list(map(lambda x: ' '.join([INSTR, x, USER, ANSWER]), documents))
+
+            return instr
+
+        def __tokenize(examples):
+            model_inputs = tokenizer(examples, 
+                                    max_length=data_args.max_source_length, 
+                                    padding=padding, 
+                                    truncation=True,
+                                    return_tensors='pt')
+            return model_inputs
+
+
+        prompet_inputs = __padd_data(examples)
+        res = __tokenize(prompet_inputs)
+
+        res['labels'] = examples[summary_column]
+
+        return res
+    
 
     # Data collator
     data_collator = DataCollatorForCompletionOnlyLM(
@@ -427,7 +445,7 @@ def main():
             predict_dataset = predict_dataset.select(range(max_predict_samples))
         with training_args.main_process_first(desc="prediction dataset map pre-processing"):
             predict_dataset = predict_dataset.map(
-                preprocess_function,
+                preprocess_function_predict,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 remove_columns=column_names,
@@ -484,7 +502,6 @@ def main():
 
     # Training
     if training_args.do_train:
-        print(">>>> TRAINING")
 
         trainer = SFTTrainer(
             model=model,
@@ -496,6 +513,7 @@ def main():
             tokenizer=tokenizer,
             args=training_args,
             packing=False,
+            optimizers=optimizers if not model_args.use_peft else (None, None)
             compute_metrics=compute_metrics
         )
 
@@ -546,114 +564,75 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     if training_args.do_predict:
-        print(">>>> PREDICTION")
         logger.info("*** Predict ***")
 
-        # reinstantiate the trainer with the prediction dataset as validation
+        # Merge LoRA parameters with the model
+        model = model.merge_and_unload()
         model.eval()
-        trainer = SFTTrainer(
-            model=model,
-            eval_dataset=predict_dataset,
-            peft_config=lora_config,
-            dataset_text_field="text",
-            max_seq_length=data_args.max_source_length,
-            tokenizer=tokenizer,
-            args=training_args,
-            packing=False,
-            compute_metrics=compute_metrics
-        )
-        
-        metrics = trainer.evaluate(metric_key_prefix="predict")
 
-        max_predict_samples = (
-            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
-        )
-        metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
+        generation_dataloader = DataLoader(predict_dataset, 
+                                            batch_size=training_args.per_device_eval_batch_size,
+                                            collate_fn=transformers.DefaultDataCollator())
 
-        trainer.log_metrics("predict", metrics)
-        trainer.save_metrics("predict", metrics)
+        gen_config = {
+            'temperature' : model_args.temperature,
+            'do_sample' : model_args.do_sample,
+            'top_k' : model_args.top_k,
+            'top_p' : model_args.top_p
+        }
 
-        
-        if trainer.is_world_process_zero():
-            if model_args.predict_with_generate:
-                
-                model = model.merge_and_unload()
+        prediction_lst = []
+        metrics_tot = None
 
-                # tokenize data
-                generation_ds = predict_dataset.map(preprocess_function_w_tok,
-                                                    batched=True,
-                                                    remove_columns=['text'])
+        for pred_data_split in tqdm(generation_dataloader, desc='Computing predictions on the test dataset...', total=len(generation_dataloader)):
 
-                generation_dataloader = DataLoader(generation_ds, 
-                                                    batch_size=training_args.per_device_eval_batch_size,
-                                                    collate_fn=transformers.DefaultDataCollator())
+            #gen_data_concat = {key: torch.cat([v.view(1,data_args.max_source_length) for v in value], dim=0).to(model.device) for key, value in gen_data_split.items()}
+            #gen_data = gen_data_concat
 
+            gen_data = {'input_ids' : pred_data_split['input_ids'], 'attention_mask' : pred_data_split['attention_mask']}
+            predictions = model.generate(**gen_data, **gen_config)
+            
+            predictions = tokenizer.batch_decode(
+                predictions, 
+                skip_special_tokens=True, 
+                clean_up_tokenization_spaces=True
+            )
+            predictions = [pred.split(ANSWER)[-1]\
+                                .replace('</s>', '')\
+                                .replace('<s>','')\
+                                .strip() for pred in predictions]
 
-                raw_test_labels = raw_datasets['test'].select(range(max_predict_samples))
-                def get_summaries(x):
-                    out={}
-                    out[summary_column] = x[summary_column]
-                    return out
-                raw_test_labels = raw_test_labels.map(get_summaries, batched=True, remove_columns=raw_test_labels.column_names)
+            labels = pred_data_split['labels']
 
-                labels_dataloader = DataLoader(raw_test_labels, 
-                                                batch_size=training_args.per_device_eval_batch_size)
-                gen_config = {
-                    'temperature' : model_args.temperature,
-                    'do_sample' : model_args.do_sample,
-                    'top_k' : model_args.top_k,
-                    'top_p' : model_args.top_p
-                }
+            # COMPUTE METRICS
+            metrics = __compute_rouge(predictions, labels)
 
-                prediction_lst = []
-                metrics_tot = None
-
-                for gen_data_split, label_split in tqdm(zip(generation_dataloader, labels_dataloader), desc='Generating answers ...', total=len(generation_dataloader)):
-
-                    gen_data_concat = {key: torch.cat([v.view(1,data_args.max_source_length) for v in value], dim=0).to(model.device) for key, value in gen_data_split.items()}
-                    #print(f"<>>>>> {gen_data_concat['input_ids'].shape} | {gen_data_split['input_ids'][0].shape}")
-                    predictions = model.generate(**gen_data_concat, **gen_config)
-                    
-                    predictions = tokenizer.batch_decode(
-                        predictions, 
-                        skip_special_tokens=True, 
-                        clean_up_tokenization_spaces=True
-                    )
-                    predictions = [pred.split(ANSWER)[-1]\
-                                        .replace('</s>', '')\
-                                        .replace('<s>','')\
-                                        .strip() for pred in predictions]
-
-                    labels = [label.split(ANSWER)[-1]\
-                                    .replace('</s>', '')\
-                                    .replace('<s>','')\
-                                    .strip() for label in label_split[summary_column]]
+            metrics["predict_len"] = np.mean([len(pred) for pred in predictions])
 
 
-                    metrics = __compute_rouge(predictions, labels)
+            if metrics_tot is None:
+                metrics_tot = metrics
+            else:
+                for k in metrics_tot: metrics_tot[k] += metrics[k]
 
-                    metrics["gen_len"] = np.mean([len(pred) for pred in predictions])
+            prediction_lst += predictions
+
+        for k in metrics_tot: metrics_tot[k] /= max_predict_samples
+
+        gen_metrics = {}
+        for k in metrics_tot: gen_metrics[f'predict_{k}'] = metrics_tot[k]
+
+        trainer.log_metrics("predict", gen_metrics)
+        trainer.save_metrics("predict", gen_metrics)
+
+        # Save textual predictions to file
+        if model_args.save_predictions_to_file:
+            output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
+            with open(output_prediction_file, "w") as writer:
+                writer.write("\n".join(prediction_lst))
 
 
-                    if metrics_tot is None:
-                        metrics_tot = metrics
-                    else:
-                        for k in metrics_tot: metrics_tot[k] += metrics[k]
-
-                    prediction_lst += predictions
-
-                for k in metrics_tot: metrics_tot[k] /= max_predict_samples
-
-                gen_metrics = {}
-                for k in metrics_tot: gen_metrics[f'generation_{k}'] = metrics_tot[k]
-
-                trainer.log_metrics("generation", gen_metrics)
-                trainer.save_metrics("generation", gen_metrics)
-                
-                output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
-                with open(output_prediction_file, "w") as writer:
-                    writer.write("\n".join(prediction_lst))
-        
+    # Final configs
     kwargs = {"finetuned_from": model_args.model_name_or_path}
 
     if training_args.push_to_hub:
