@@ -54,10 +54,10 @@ CUDA_VISIBLE_DEVICES=0 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --output_dir $OUT_DIR \
                                        --per_device_train_batch_size $TRAIN_BS \
                                        --per_device_eval_batch_size $EVAL_BS \
-                                       --eval_accumulation_steps 30\
                                        --pad_to_max_length \
                                        --seed $SEED \
                                        --max_train_samples $MAX_TRAIN_SAMPLES \
+                                       --eval_accumulation_steps 30\
                                        --use_peft \
                                        --fp16 \
                                        --max_steps $MAX_STEPS \

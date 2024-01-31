@@ -49,7 +49,6 @@ do
                                             --per_device_train_batch_size $TRAIN_BS \
                                             --per_device_eval_batch_size $EVAL_BS \
                                             --pad_to_max_length \
-                                            --eval_accumulation_steps 30\
                                             --seed $SEED \
                                             --max_train_samples $FS \
                                             --use_peft \
@@ -90,7 +89,6 @@ do
                                             --val_max_target_length $MAX_TARGET_LENGTH \
                                             --max_source_length $MAX_SOURCE_LENGTH \
                                             --model_name_or_path $MODEL_NAME \
-                                            --eval_accumulation_steps 30\
                                             --cache_dir $CACHE_DIR \
                                             --output_dir $OUT_DIR \
                                             --per_device_train_batch_size $TRAIN_BS \
