@@ -48,7 +48,7 @@ do
                                             --output_dir $OUT_DIR \
                                             --per_device_train_batch_size $TRAIN_BS \
                                             --per_device_eval_batch_size $EVAL_BS \
-                                            --eval_accumulation_steps 50\
+                                            --eval_accumulation_steps 30\
                                             --pad_to_max_length \
                                             --seed $SEED \
                                             --max_train_samples $FS \
@@ -96,10 +96,8 @@ do
                                             --per_device_eval_batch_size $EVAL_BS \
                                             --pad_to_max_length \
                                             --seed $SEED \
-                                            --max_train_samples $MAX_TRAIN_SAMPLES \
-                                            --max_eval_samples $MAX_TEST_SAMPLES \
-                                            --max_predict_samples $MAX_TEST_SAMPLES \
-                                            --eval_accumulation_steps 50\
+                                            --max_train_samples $FS \
+                                            --eval_accumulation_steps 30\
                                             --use_peft \
                                             --fp16 \
                                             --max_steps $MAX_STEPS \

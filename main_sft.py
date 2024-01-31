@@ -484,6 +484,7 @@ def main():
 
     # Training
     if training_args.do_train:
+        print(">>>> TRAINING")
 
         trainer = SFTTrainer(
             model=model,
@@ -520,6 +521,7 @@ def main():
     # Evaluation
     results = {}
     if training_args.do_eval:
+        print(">>>> EVALUATION")
         logger.info("*** Evaluate ***")
 
         if trainer is None:
@@ -544,6 +546,7 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     if training_args.do_predict:
+        print(">>>> PREDICTION")
         logger.info("*** Predict ***")
 
         # reinstantiate the trainer with the prediction dataset as validation

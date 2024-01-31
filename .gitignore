@@ -8,6 +8,7 @@ cache/
 wandb/
 runs/
 results/
+results_old/
 
 # C extensions
 *.so

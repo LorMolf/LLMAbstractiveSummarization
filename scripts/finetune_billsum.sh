@@ -43,7 +43,7 @@ do
                                             --summary_column $SUM_COL \
                                             --val_max_target_length $MAX_TARGET_LENGTH \
                                             --max_source_length $MAX_SOURCE_LENGTH \
-                                            --eval_accumulation_steps 50\
+                                            --eval_accumulation_steps 30\
                                             --model_name_or_path $MODEL_NAME \
                                             --cache_dir $CACHE_DIR \
                                             --output_dir $OUT_DIR \
@@ -92,14 +92,12 @@ do
                                             --model_name_or_path $MODEL_NAME \
                                             --cache_dir $CACHE_DIR \
                                             --output_dir $OUT_DIR \
-                                            --eval_accumulation_steps 50\
+                                            --eval_accumulation_steps 30\
                                             --per_device_train_batch_size $TRAIN_BS \
                                             --per_device_eval_batch_size $EVAL_BS \
                                             --pad_to_max_length \
                                             --seed $SEED \
-                                            --max_train_samples $MAX_TRAIN_SAMPLES \
-                                            --max_eval_samples $MAX_TEST_SAMPLES \
-                                            --max_predict_samples $MAX_TEST_SAMPLES \
+                                            --max_train_samples $FS \
                                             --use_peft \
                                             --fp16 \
                                             --max_steps $MAX_STEPS \
