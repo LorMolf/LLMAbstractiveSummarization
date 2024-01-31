@@ -64,32 +64,19 @@ except (LookupError, OSError):
         nltk.download("punkt", quiet=True)
 
 
-INSTRUCTION_PROMPT = """
-You are an assistant capable of producing faithful and concise summaries of an input document. 
-Read the text provided by the user and summarize it by keeping the most useful information which
-you consider to best sum up the content of the document. Be as concise as needed and do not
-include information out of the input text's domain. Include the summary within 
-the characters ``` ´´´ right after the word '{}'\n"""
-USER_PROMPT = 'Summarize the following text:\n'
 
-PROMPTS = {
-    'zephyr' : {
-        'instruction' : f'<|system|> {INSTRUCTION_PROMPT.format("<|assistant|>")}',
-        'user' : f'<|user|> {USER_PROMPT}',
-        'answer' : '<|assistant|>'
-    },
-    # 'llama2' : {
-    #     'instruction' : f'[INST] <<SYS>> {INSTRUCTION_PROMPT}',
-    #     'user' : f'<</SYS>> {USER_PROMPT}',
-    #     'answer' : '[/INST]'
-    # }
-    'llama2' : {
-        'instruction' : f'# Assistant:\n {INSTRUCTION_PROMPT.format("# Summary:")}',
-        'user' : f'# Summarize:\n {USER_PROMPT}',
-        'answer' : '# Summary:'
-    }
-}
+from src.prompts import PROMPTS, DATASETS_SPECIFIC_PROMPTS, START_TAG, END_TAG
 
+
+def split_out_answer(prediction):
+    # splits = prediction.strip().split('```')[:-1]
+    # answer = splits[-1] if len(splits[-1]) > 0 else splits[-2]
+
+    answer = prediction.strip() \
+                       .split(START_TAG)[-1] \
+                       .split(END_TAG)[0]     
+
+    return answer.strip()
 
 def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
@@ -152,12 +139,19 @@ def main():
         raw_datasets = load_from_disk(data_args.dataset_name_local)
     elif data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(
-            data_args.dataset_name,
-            data_args.lang,
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
+        if data_args.dataset_name == 'cnn_dailymail':
+            raw_datasets = load_dataset(
+                data_args.dataset_name,
+                '1.0.0',
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+            )
+        else:
+            raw_datasets = load_dataset(
+                data_args.dataset_name,
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+            )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -304,8 +298,11 @@ def main():
         )
 
     model_type = model_args.model_type
+
+    dataset_prompt = DATASETS_SPECIFIC_PROMPTS[data_args.dataset_name]
+
     INSTR = PROMPTS[model_type]['instruction']
-    USER = PROMPTS[model_type]['user']
+    USER = PROMPTS[model_type]['user'].format(dataset_prompt)
     ANSWER = PROMPTS[model_type]['answer']
 
     # preprocessing
@@ -317,7 +314,7 @@ def main():
 
         # append prefix and postfix prompts
         instr = list(map(lambda x: '\n'.join([INSTR, USER, x]), documents))
-        resp = list(map(lambda x: '\n'.join([ANSWER,'```',x,'´´´']), summaries))
+        resp = list(map(lambda x: '\n'.join([ANSWER,START_TAG,x,END_TAG]), summaries))
         inputs = list(map(lambda x: '\n'.join([x[0], x[1], tokenizer.eos_token ]),zip(instr, resp)))
 
         return inputs
@@ -333,7 +330,7 @@ def main():
             documents = sample[text_column]
             inputs = []    
             # append prefix and postfix prompts
-            instr = list(map(lambda x: '\n'.join([INSTR, USER, x, ANSWER, '```']), documents))
+            instr = list(map(lambda x: '\n'.join([INSTR, USER, x, ANSWER, START_TAG]), documents))
 
             return instr
 
@@ -483,14 +480,8 @@ def main():
         preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
-        decoded_preds = [pred.split('```')[-1].split('´´´')[0]\
-                             .replace('</s>', '')\
-                             .replace('<s>','')\
-                             .strip() for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
-        decoded_labels = [label.split('```')[-1].split('´´´')[0]\
-                               .replace('</s>', '')\
-                               .replace('<s>','')\
-                               .strip() for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
+        decoded_preds = [split_out_answer(pred) for pred in tokenizer.batch_decode(preds, skip_special_tokens=True)]
+        decoded_labels = [split_out_answer(label) for label in tokenizer.batch_decode(labels, skip_special_tokens=True)]
 
         result = __compute_rouge(decoded_preds, decoded_labels)
 
@@ -512,6 +503,7 @@ def main():
         optimizers=optimizers if not model_args.use_peft else (None, None),
         compute_metrics=compute_metrics
     )
+    trainer.save_strategy="no"
 
     # Training
     if training_args.do_train:
@@ -583,16 +575,20 @@ def main():
                 'do_sample' : model_args.do_sample,
                 'max_new_tokens' : data_args.max_target_length,
                 'top_k' : model_args.top_k,
-                'top_p' : model_args.top_p
+                'top_p' : model_args.top_p,
+                'use_cache' : True
             }
         else:
             gen_config = {
-                'do_sample':   model_args.do_sample,
-                'max_new_tokens' : data_args.max_target_length
+                'do_sample':   False,
+                'max_new_tokens' : data_args.max_target_length,
+                'num_beams' : 1,
+                'use_cache' : True
             }
             
 
         prediction_lst = []
+        prediction_whole = []
         metrics_tot = None
 
         for i, pred_data_split in tqdm(enumerate(generation_dataloader), desc='Computing predictions on the test dataset...', total=num_pred_steps):
@@ -608,10 +604,10 @@ def main():
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=True
             )
-            predictions = [pred.split('```')[-1].split('´´´')[0]\
-                                .replace('</s>', '')\
-                                .replace('<s>','')\
-                                .strip() for pred in predictions]
+
+            prediction_whole += predictions
+
+            predictions = [split_out_answer(pred) for pred in predictions]
 
             # COMPUTE METRICS
             bs = len(predictions)
@@ -638,7 +634,8 @@ def main():
         if model_args.save_predictions_to_file:
             output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
             with open(output_prediction_file, "w") as writer:
-                writer.write("\n".join(prediction_lst))
+                for i, pred in enumerate(prediction_lst):
+                    writer.write('\n'.join(['-'*50, label_list[i], '*'*10, pred, '*'*10, prediction_whole[i], '\n']))
 
 
     # Final configs

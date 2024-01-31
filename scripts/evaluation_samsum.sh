@@ -7,10 +7,10 @@ OUT_DIR="results"
 SEED=42
 
 # Config
-MAX_TRAIN_SAMPLES=10
-MAX_TEST_SAMPLES=5
+MAX_TEST_SAMPLES=10
 
-MAX_STEPS=100
+MAX_TRAIN_SAMPLES=100
+MAX_STEPS=1000
 WARMUP_STEPS=25
 
 
@@ -30,8 +30,14 @@ TEXT_COL="dialogue"
 SUM_COL="summary"
 
 
+# DATASET_NAME="billsum"
+# TEXT_COL="text"
+# SUM_COL="summary"
+
+
+
 MAX_SOURCE_LENGTH=1024
-MAX_TARGET_LENGTH=200
+MAX_TARGET_LENGTH=100
 
 LR='1e-4'
 
@@ -54,7 +60,7 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --per_device_train_batch_size $TRAIN_BS \
                                        --per_device_eval_batch_size $EVAL_BS \
                                        --max_train_samples $MAX_TRAIN_SAMPLES \
-                                       --max_predict_samples 5 \
+                                       --max_predict_samples $MAX_TEST_SAMPLES \
                                        --max_steps $MAX_STEPS \
                                        --warmup_steps $WARMUP_STEPS \
                                        --neftune_noise_alpha '5'\
@@ -67,11 +73,11 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --fp16 \
                                        --report_to "wandb" \
                                        --do_predict \
-                                       --do_train \
-                                    #    --do_sample \
-                                    #    --top_k $TOP_K \
-                                    #    --top_p $TOP_P \
-                                    #    --temperature $TEMPERATURE \
+                                       # --do_train \
+                                       # --do_sample \
+                                       # --top_k $TOP_K \
+                                       # --top_p $TOP_P \
+                                       # --temperature $TEMPERATURE \
                                     #    --eval_accumulation_steps 30\
                                     #    --max_predict_samples $MAX_TEST_SAMPLES \
                                     #    --max_eval_samples $MAX_TEST_SAMPLES \
