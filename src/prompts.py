@@ -12,7 +12,7 @@ include information out of the input text's domain. Include the summary within t
 
 
 DATASETS_SPECIFIC_PROMPTS = {
-    'samsum' : 'Summarize the content of the following utterances into a concise brief of what people talked about in the conversation. Use third person to refer to them',
+    'samsum' : "Summarize the content of the following utterances into a concise brief of what people talked about in the conversation. Use third person to refer to them. Do not use general introductions and be direct",
     'billsum' : 'Sumarize the content of the following bill preserving some details',
     'multi_news' : 'Summarize the content of the following newspaper article. If necessary, yuo can include links and citation to the original articles',
     'EdinburghNLP/xsum' : 'Summarize the content of the following text by drastically reducing its length',

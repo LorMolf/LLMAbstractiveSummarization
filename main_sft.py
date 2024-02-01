@@ -575,14 +575,16 @@ def main():
                 'max_new_tokens' : data_args.max_target_length,
                 'top_k' : model_args.top_k,
                 'top_p' : model_args.top_p,
-                'use_cache' : True
+                'use_cache' : True,
+                'pad_token_id' : tokenizer.eos_token_id
             }
         else:
             gen_config = {
                 'do_sample':   False,
                 'max_new_tokens' : data_args.max_target_length,
                 'num_beams' : 1,
-                'use_cache' : True
+                'use_cache' : True,
+                'pad_token_id' : tokenizer.eos_token_id
             }
             
 
