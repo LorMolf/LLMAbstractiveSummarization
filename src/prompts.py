@@ -1,6 +1,6 @@
 
-START_TAG = '[START SUMMARY]'
-END_TAG = '[END SUMMARY]' 
+START_TAG = '<|START SUMMARY|>'
+END_TAG = '<|END SUMMARY|>' 
 
 
 INSTRUCTION_PROMPT = """
@@ -36,8 +36,8 @@ PROMPTS = {
         'answer' : '# Answer:'
     },
     'phi2' : {
-        'instruction' : f'# Instruct: {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "")}',
-        'user' : f'# Summarize:\n {USER_PROMPT}',
-        'answer' : '# Output: '
+        'instruction' : f'<|system|> {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "")}',
+        'user' : f'<|user|> {USER_PROMPT}',
+        'answer' : '<|assistant|>'
     }
 }

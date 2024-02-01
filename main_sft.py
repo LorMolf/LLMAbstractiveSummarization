@@ -64,17 +64,15 @@ except (LookupError, OSError):
         nltk.download("punkt", quiet=True)
 
 
-
 from src.prompts import PROMPTS, DATASETS_SPECIFIC_PROMPTS, START_TAG, END_TAG
 
 
 def split_out_answer(prediction):
-    # splits = prediction.strip().split('```')[:-1]
-    # answer = splits[-1] if len(splits[-1]) > 0 else splits[-2]
 
     answer = prediction.strip() \
                        .split(START_TAG)[-1] \
-                       .split(END_TAG)[0]     
+                       .split(END_TAG)[0] \
+                       .replace('<|assistant|>','')     
 
     return answer.strip()
 
@@ -232,6 +230,7 @@ def main():
       print("No padding token - using EOS instead")
       tokenizer.pad_token = tokenizer.eos_token
     
+    tokenizer.padding_side='left'
     
     if len(tokenizer) > embedding_size:
         model.resize_token_embeddings(len(tokenizer))
