@@ -186,7 +186,8 @@ def main():
         )
 
         model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, 
-                                                     quantization_config=bnb_config)
+                                                     quantization_config=bnb_config,
+                                                     trust_remote_code=True)
         
         # prepare int-8 model for training
         model.gradient_checkpointing_enable()

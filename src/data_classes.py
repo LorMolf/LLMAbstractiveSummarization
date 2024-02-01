@@ -246,9 +246,9 @@ class ModelArguments:
 
     model_type : Optional[str] = field(
         default='zephyr',
-        metadata={"help": "Type of input model ('zephyr' OR 'llama2')"}
+        metadata={"help": "Type of input model ('zephyr' OR 'llama2' OR 'phi-2')"}
     )
 
     def __post_init__(self):
-        if self.model_type not in ['zephyr', 'llama2']:
-            raise ValueError(f"Specify a model type among these two options: 'zephyr' OR 'llama2'")
+        if self.model_type not in ['zephyr', 'llama2', 'phi-2']:
+            raise ValueError(f"Specify a model type among these two options: 'zephyr' OR 'llama2' OR 'phi-2'")

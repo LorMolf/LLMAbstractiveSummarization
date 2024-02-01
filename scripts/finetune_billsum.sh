@@ -10,10 +10,10 @@ CACHE_DIR="cache"
 OUT_DIR="results"
 
 TRAIN_BS=1
-EVAL_BS=1
+EVAL_BS=4
 
 MAX_SOURCE_LENGTH=1024
-MAX_TARGET_LENGTH=200
+MAX_TARGET_LENGTH=100
 
 LR='1e-4'
 
@@ -38,7 +38,7 @@ do
     do
         MAX_STEPS=$(($FS*10))
         
-        CUDA_VISIBLE_DEVICES=0 python3 main_sft.py --dataset_name $DATASET_NAME \
+        CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                             --text_column $TEXT_COL \
                                             --summary_column $SUM_COL \
                                             --val_max_target_length $MAX_TARGET_LENGTH \
@@ -81,7 +81,7 @@ do
     do
         MAX_STEPS=$(($FS*10))
         
-        CUDA_VISIBLE_DEVICES=0 python3 main_sft.py --dataset_name $DATASET_NAME \
+        CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                             --text_column $TEXT_COL \
                                             --summary_column $SUM_COL \
                                             --val_max_target_length $MAX_TARGET_LENGTH \

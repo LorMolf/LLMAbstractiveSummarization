@@ -15,13 +15,16 @@ WARMUP_STEPS=25
 
 
 TRAIN_BS=1
-EVAL_BS=2
+EVAL_BS=4
 
 MODEL_NAME="HuggingFaceH4/zephyr-7b-beta"
 model_type='zephyr'
 
 # MODEL_NAME="meta-llama/Llama-2-13b-chat-hf"
 # model_type="llama2"
+
+MODEL_NAME='microsoft/phi-2'
+model_type='phi-2'
 
 
 # Data
@@ -37,7 +40,7 @@ SUM_COL="summary"
 
 
 MAX_SOURCE_LENGTH=1024
-MAX_TARGET_LENGTH=100
+MAX_TARGET_LENGTH=50
 
 LR='1e-4'
 
@@ -60,6 +63,7 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --per_device_train_batch_size $TRAIN_BS \
                                        --per_device_eval_batch_size $EVAL_BS \
                                        --max_train_samples $MAX_TRAIN_SAMPLES \
+                                       --max_predict_samples 10 \
                                        --max_steps $MAX_STEPS \
                                        --warmup_steps $WARMUP_STEPS \
                                        --neftune_noise_alpha '5'\
@@ -71,9 +75,9 @@ CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
                                        --fp16 \
                                        --report_to "wandb" \
                                        --do_predict \
-                                       --save_strategy "no"
-                                        #--save_predictions_to_file \
-                                       #--do_train \
+                                       --save_strategy "no" \
+                                       --save_predictions_to_file \
+                                       --do_train \
                                        # --do_sample \
                                        # --top_k $TOP_K \
                                        # --top_p $TOP_P \

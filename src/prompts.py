@@ -30,14 +30,14 @@ PROMPTS = {
         'user' : f'<|user|> {USER_PROMPT}',
         'answer' : '<|assistant|>'
     },
-    # 'llama2' : {
-    #     'instruction' : f'[INST] <<SYS>> {INSTRUCTION_PROMPT}',
-    #     'user' : f'<</SYS>> {USER_PROMPT}',
-    #     'answer' : '[/INST]'
-    # }
     'llama2' : {
         'instruction' : f'# Assistant:\n {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "# Summary:")}',
         'user' : f'# Summarize:\n {USER_PROMPT}',
         'answer' : '# Answer:'
+    },
+    'phi2' : {
+        'instruction' : f'# Instruct: {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "")}',
+        'user' : f'# Summarize:\n {USER_PROMPT}',
+        'answer' : '# Output: '
     }
 }
