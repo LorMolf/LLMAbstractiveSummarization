@@ -6,14 +6,15 @@ DATASET_NAME="cnn_dailymail"
 TEXT_COL="article"
 SUM_COL="highlights"
 
+
 CACHE_DIR="cache"
 OUT_DIR="results"
 
-TRAIN_BS=1
-EVAL_BS=8
+TRAIN_BS=2
+EVAL_BS=24
 
 MAX_SOURCE_LENGTH=1024
-MAX_TARGET_LENGTH=100
+MAX_TARGET_LENGTH=50
 
 LR='1e-4'
 
@@ -59,9 +60,9 @@ do
                                             --lr_scheduler_type "cosine" \
                                             --learning_rate $LR \
                                             --do_predict \
-                                            --do_train \
                                             --report_to "wandb" \
-                                            --save_strategy "no"
+                                            --save_strategy "no" \
+                                            #--do_train \
     done
 done
 
