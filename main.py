@@ -351,7 +351,7 @@ def main():
                 num_training_steps=max_train_steps
             )
         else:
-            optimizer = 'paged_adamw_8bit'
+            optimizer = ' paged_adamw_32bit'
             lr_scheduler = 'cosine'
         
         optimizers = (optimizer, lr_scheduler)

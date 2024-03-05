@@ -197,7 +197,7 @@ def main():
             lora_alpha=32,
             lora_dropout=0.1,
             bias="none",
-            target_modules=["q_proj", "v_proj"],
+            target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
             task_type="CAUSAL_LM")
 
         # add LoRA adaptor
@@ -400,14 +400,14 @@ def main():
             optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=training_args.learning_rate)
 
             lr_scheduler = get_scheduler(
-                name="linear",
+                name=model_args.lr_scheduler_type,
                 optimizer=optimizer,
                 num_warmup_steps=0,
                 num_training_steps=max_train_steps
             )
         else:
-            optimizer = 'paged_adamw_8bit'
-            lr_scheduler = 'cosine'
+            optimizer = model_args.optim
+            lr_scheduler = model_args.lr_scheduler_type
         
         optimizers = (optimizer, lr_scheduler)
     else:
@@ -513,8 +513,9 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
 
-        train_result = trainer.train()#resume_from_checkpoint=checkpoint)
-        #trainer.save_model()  # Saves the tokenizer too for easy upload
+        
+        train_result = trainer.train(checkpoint=checkpoint)
+        trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
         max_train_samples = (
@@ -524,7 +525,7 @@ def main():
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
-        #trainer.save_state()
+        trainer.save_state()
 
     # Evaluation
     results = {}
@@ -589,13 +590,9 @@ def main():
             
 
         prediction_lst = []
-        #prediction_whole = []
         metrics_tot = None
 
         for i, pred_data_split in tqdm(enumerate(generation_dataloader), desc='Computing predictions on the test dataset...', total=num_pred_steps):
-
-            #gen_data_concat = {key: torch.cat([v.view(1,data_args.max_source_length) for v in value], dim=0).to(model.device) for key, value in gen_data_split.items()}
-            #gen_data = gen_data_concat
 
             gen_data = {'input_ids' : pred_data_split['input_ids'].to(model.device), 'attention_mask' : pred_data_split['attention_mask'].to(model.device)}
             predictions = model.generate(**gen_data, **gen_config)
@@ -605,8 +602,6 @@ def main():
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=True
             )
-
-            #prediction_whole += predictions
 
             predictions = [split_out_answer(pred) for pred in predictions]
 

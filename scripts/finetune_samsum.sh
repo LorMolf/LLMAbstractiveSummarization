@@ -38,7 +38,7 @@ do
     do
         MAX_STEPS=$(($FS*10))
         
-        CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
+        python3 main_sft.py --dataset_name $DATASET_NAME \
                                             --text_column $TEXT_COL \
                                             --summary_column $SUM_COL \
                                             --val_max_target_length $MAX_TARGET_LENGTH \
@@ -56,7 +56,7 @@ do
                                             --max_steps $MAX_STEPS \
                                             --warmup_steps $WARMUP_STEPS \
                                             --neftune_noise_alpha $NEFTUNE\
-                                            --optim "paged_adamw_8bit" \
+                                            --optim " paged_adamw_32bit" \
                                             --lr_scheduler_type "cosine" \
                                             --learning_rate $LR \
                                             --do_predict \
@@ -80,7 +80,7 @@ do
     do
         MAX_STEPS=$(($FS*10))
         
-        CUDA_VISIBLE_DEVICES=1 python3 main_sft.py --dataset_name $DATASET_NAME \
+        python3 main_sft.py --dataset_name $DATASET_NAME \
                                             --text_column $TEXT_COL \
                                             --summary_column $SUM_COL \
                                             --val_max_target_length $MAX_TARGET_LENGTH \
@@ -98,7 +98,7 @@ do
                                             --max_steps $MAX_STEPS \
                                             --warmup_steps $WARMUP_STEPS \
                                             --neftune_noise_alpha $NEFTUNE\
-                                            --optim "paged_adamw_8bit" \
+                                            --optim " paged_adamw_32bit" \
                                             --lr_scheduler_type "cosine" \
                                             --learning_rate $LR \
                                             --do_predict \

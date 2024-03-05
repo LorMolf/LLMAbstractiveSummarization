@@ -249,6 +249,17 @@ class ModelArguments:
         metadata={"help": "Type of input model ('zephyr' OR 'llama2' OR 'phi-2')"}
     )
 
+    optim : Optional[str] = field(
+        default='paged_adamw_32bit',
+        metadata={"help":"Name of the optimizer to use."}
+    )
+
+    lr_scheduler_type : Optional[str] = field(
+        default='cosine',
+        metadata={"help" : "Type of learning rate scheduler."}
+    )
+
+
     def __post_init__(self):
         if self.model_type not in ['zephyr', 'llama2', 'phi-2']:
             raise ValueError(f"Specify a model type among these two options: 'zephyr' OR 'llama2' OR 'phi-2'")
