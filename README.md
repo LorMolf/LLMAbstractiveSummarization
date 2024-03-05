@@ -10,4 +10,4 @@ Finetuning and evaluation of large language models in summarization tasks.
 - `src/prompts.py`: prompt formats specific for each model - change these configurations according to your model choice
 
 ## Quantization
-These scripts employ the QLoRA approach for quantization-aware finetuning. You can tweak the parameter `target_modules` in the configuration to change the number and type of layers LoRA adapters are applied to.
+These scripts employ the QLoRA approach for quantization-aware finetuning. You can tweak the parameter `target_modules` in the configuration to change the number and type of layers LoRA adapters are applied to. You can also modify the values of `r` (rank) and `alpha` (weight) to affect the model's precision and memory footprint.
