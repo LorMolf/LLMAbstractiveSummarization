@@ -5,16 +5,16 @@ END_TAG = '<|END SUMMARY|>'
 
 INSTRUCTION_PROMPT = """
 You are an assistant capable of producing faithful and concise summaries of an input document. 
-Read the text provided by the user and summarize it by keeping the most useful information which
-you consider to best sum up the content of the document. Be as concise as needed and do not
-include information out of the input text's domain. Include the summary within the tags
-{} and {} right after the work '{}'\n"""
+Read the text provided by the user and summarize it by keeping the most useful information that
+you consider to best sum up the document's content. Be as concise as needed, and do not
+include information from the input text's domain. Include the summary within the tags
+{} and {} right after the word '{}'\n"""
 
 
 DATASETS_SPECIFIC_PROMPTS = {
-    'samsum' : "Summarize the content of the following utterances into a concise brief of what people talked about in the conversation. Use third person to refer to them. Do not use general introductions and be direct",
-    'billsum' : 'Sumarize the content of the following bill preserving some details',
-    'multi_news' : 'Summarize the content of the following newspaper article. If necessary, yuo can include links and citation to the original articles',
+    'samsum' : "Summarize the content of the following utterances into a concise brief of what people talked about in the conversation. Use the third person to refer to them. Do not use general introductions and be direct",
+    'billsum' : 'Summarize the content of the following bill preserving some details',
+    'multi_news' : 'Summarize the content of the following newspaper article. If necessary, you can include links and citations to the original articles',
     'EdinburghNLP/xsum' : 'Summarize the content of the following text by drastically reducing its length',
     'cnn_dailymail' : 'Summarize the following newspaper article'
 }
