@@ -4,11 +4,17 @@ END_TAG = '<|END SUMMARY|>'
 
 
 INSTRUCTION_PROMPT = """
-You are an assistant capable of producing faithful and concise summaries of an input document. 
-Read the text provided by the user and summarize it by keeping the most useful information that
-you consider to best sum up the document's content. Be as concise as needed, and do not
-include information from the input text's domain. Include the summary within the tags
-{} and {} right after the word '{}'\n"""
+You're a capable assistant able to generate accurate and brief summaries of input text. 
+Summarize user-provided text by retaining the most pertinent information to 
+effectively capture the document's essence.
+
+Follow the instructions below:
+- craft a detailed, thorough, in-depth, and complex summary while maintaining clarity and conciseness;
+- incorporate main ideas and essential information, focusing on critical aspects;
+- rely strictly on the provided text without including external information;
+- enclose the summary within the tags {} and {};
+- answer directly without adding anything more.
+"""
 
 
 DATASETS_SPECIFIC_PROMPTS = {
@@ -26,18 +32,18 @@ USER_PROMPT = '{}:\n'
 
 PROMPTS = {
     'zephyr' : {
-        'instruction' : f'<|system|> {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "<|assistant|>")}',
+        'instruction' : f'<|system|> {INSTRUCTION_PROMPT.format(START_TAG, END_TAG)}',
         'user' : f'<|user|> {USER_PROMPT}',
         'answer' : '<|assistant|>'
     },
     'llama2' : {
-        'instruction' : f'# Assistant:\n {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "# Summary:")}',
-        'user' : f'# Summarize:\n {USER_PROMPT}',
-        'answer' : '# Answer:'
+        'instruction' : f'<s>[INST] <<SYS>>\n {INSTRUCTION_PROMPT.format(START_TAG, END_TAG)}',
+        'user' : f'<</SYS>>\n {USER_PROMPT}',
+        'answer' : '[/INST]'
     },
-    'phi2' : {
-        'instruction' : f'<|system|> {INSTRUCTION_PROMPT.format(START_TAG, END_TAG, "")}',
-        'user' : f'<|user|> {USER_PROMPT}',
-        'answer' : '<|assistant|>'
+    'gemma' : {
+        'instruction' : f'<start_of_turn>user\n{INSTRUCTION_PROMPT.format(START_TAG, END_TAG)}',
+        'user' : f'{USER_PROMPT}<end_of_turn>',
+        'answer' : '<start_of_turn>model'
     }
 }
