@@ -3,31 +3,47 @@ START_TAG = '<|START SUMMARY|>'
 END_TAG = '<|END SUMMARY|>' 
 
 
+# INSTRUCTION_PROMPT = """
+# You're a capable assistant able to generate accurate and brief summaries of input text. 
+# Summarize user-provided text by retaining the most pertinent information to 
+# effectively capture the document's essence.
+
+# Follow the instructions below:
+# - craft a detailed, thorough, in-depth, and complex summary while maintaining clarity and conciseness;
+# - incorporate main ideas and essential information, focusing on critical aspects;
+# - rely strictly on the provided text without including external information;
+# - enclose the summary within the tags {} and {};
+# - answer directly without adding anything more.
+# """
+
 INSTRUCTION_PROMPT = """
-You're a capable assistant able to generate accurate and brief summaries of input text. 
+You are a helpful assistant able to generate accurate and brief summaries of an input text. 
 Summarize user-provided text by retaining the most pertinent information to 
 effectively capture the document's essence.
 
-Follow the instructions below:
-- craft a detailed, thorough, in-depth, and complex summary while maintaining clarity and conciseness;
-- incorporate main ideas and essential information, focusing on critical aspects;
-- rely strictly on the provided text without including external information;
-- enclose the summary within the tags {} and {};
-- answer directly without adding anything more.
+Answer with a summary of the input text enclosed within the tags {} and {}.
 """
 
 
+# DATASETS_SPECIFIC_PROMPTS = {
+#     'samsum' : "Summarize the content of the following utterances into a concise brief of what people talked about in the conversation. Use the third person to refer to them. Do not use general introductions and be direct",
+#     'billsum' : 'Summarize the content of the following bill preserving some details',
+#     'multi_news' : 'Summarize the content of the following newspaper article. If necessary, you can include links and citations to the original articles',
+#     'EdinburghNLP/xsum' : 'Summarize the content of the following text by drastically reducing its length',
+#     'cnn_dailymail' : 'Summarize the following newspaper article'
+# }
+
+
 DATASETS_SPECIFIC_PROMPTS = {
-    'samsum' : "Summarize the content of the following utterances into a concise brief of what people talked about in the conversation. Use the third person to refer to them. Do not use general introductions and be direct",
-    'billsum' : 'Summarize the content of the following bill preserving some details',
-    'multi_news' : 'Summarize the content of the following newspaper article. If necessary, you can include links and citations to the original articles',
-    'EdinburghNLP/xsum' : 'Summarize the content of the following text by drastically reducing its length',
-    'cnn_dailymail' : 'Summarize the following newspaper article'
+    'samsum' : "Summarize the content of the following text:",
+    'billsum' : "Summarize the content of the following text:",
+    'multi_news' : "Summarize the content of the following text:",
+    'EdinburghNLP/xsum' : "Summarize the content of the following text:",
+    'cnn_dailymail' : "Summarize the content of the following text:"
 }
 
 
 USER_PROMPT = '{}:\n'
-
 
 
 PROMPTS = {

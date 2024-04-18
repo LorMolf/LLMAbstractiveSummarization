@@ -170,7 +170,7 @@ def main():
         
         # prepare int-8 model for training
         model.gradient_checkpointing_enable()
-        model = prepare_model_for_int8_training(model)
+        model = prepare_model_for_kbit_training(model)
 
         # Define LoRA Config
         lora_config = LoraConfig(
